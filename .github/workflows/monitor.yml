@@ -1,0 +1,43 @@
+name: AIS-overvaking
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"   # hvert 10. minutt (GitHub kan forsinke noe)
+  workflow_dispatch: {}       # mulighet for manuell kjøring
+
+permissions:
+  contents: write             # for å lagre state.json tilbake til repoet
+  issues: write               # for å opprette varsel-issues (gir e-post fra GitHub)
+
+concurrency:
+  group: ais-monitor
+  cancel-in-progress: false
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Installer avhengigheter
+        run: pip install -r requirements.txt
+
+      - name: Kjør overvåking
+        env:
+          BW_CLIENT_ID: ${{ secrets.BW_CLIENT_ID }}
+          BW_CLIENT_SECRET: ${{ secrets.BW_CLIENT_SECRET }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python monitor.py
+
+      - name: Lagre tilstand
+        run: |
+          git config user.name "ais-bot"
+          git config user.email "actions@github.com"
+          git add state.json
+          git diff --cached --quiet || git commit -m "Oppdater tilstand [skip ci]"
+          git push
