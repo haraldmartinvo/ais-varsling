@@ -2,21 +2,22 @@ name: AIS-overvaking
 
 on:
   schedule:
-    - cron: "*/10 * * * *"   # hvert 10. minutt (GitHub kan forsinke noe)
-  workflow_dispatch: {}       # mulighet for manuell kjøring
+    - cron: "23 * * * *"    # kun sikkerhetsnett: restarter kjeden hvis den dør
+  workflow_dispatch: {}      # manuell start + selvstart fra forrige kjøring
 
 permissions:
-  contents: write             # for å lagre state.json tilbake til repoet
-  issues: write               # for å opprette varsel-issues (gir e-post fra GitHub)
+  contents: write            # lagre state.json
+  issues: write              # opprette varsel-issues (gir e-post fra GitHub)
+  actions: write             # starte neste kjøring (kontinuerlig kjede)
 
 concurrency:
-  group: ais-monitor
+  group: ais-monitor         # aldri mer enn én aktiv kjøring
   cancel-in-progress: false
 
 jobs:
   monitor:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 350
     steps:
       - uses: actions/checkout@v4
 
@@ -27,17 +28,30 @@ jobs:
       - name: Installer avhengigheter
         run: pip install -r requirements.txt
 
-      - name: Kjør overvåking
+      - name: Kjør kontinuerlig overvåking (~5,5 t, sjekk hvert 2. min)
         env:
           BW_CLIENT_ID: ${{ secrets.BW_CLIENT_ID }}
           BW_CLIENT_SECRET: ${{ secrets.BW_CLIENT_SECRET }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_MINUTES: "330"
+          POLL_SECONDS: "120"
         run: python monitor.py
 
       - name: Lagre tilstand
+        if: always()
         run: |
           git config user.name "ais-bot"
           git config user.email "actions@github.com"
           git add state.json
           git diff --cached --quiet || git commit -m "Oppdater tilstand [skip ci]"
-          git push
+          git pull --rebase origin main || true
+          git push || true
+
+      - name: Start neste kjøring (kontinuerlig kjede)
+        if: always()
+        run: |
+          curl -s -X POST \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/${{ github.repository }}/actions/workflows/monitor.yml/dispatches \
+            -d '{"ref":"main"}'
