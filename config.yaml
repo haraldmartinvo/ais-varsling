@@ -3,14 +3,38 @@
 
 fartoy:
   - navn: GROTANGER
-    mmsi: 257699000    # MS Grotanger, brønnbåt, Brønnbåt Nord AS (IMO 9880788)
+    mmsi: 257699000    # Brønnbåt Nord (IMO 9880788)
+  - navn: SKROVA
+    mmsi: 257851000    # Brønnbåt Nord Lofoten (IMO 9904443)
+  - navn: CASPIAN
+    mmsi: 257735000    # Brønnbåt Nord (IMO 9939773)
 
 lokaliteter:
   - navn: Enkeltstein
     nr: 11363
     lat: 68.727583
     lon: 16.910167
-    radius_m: 800      # Regnes som "ved lokaliteten" innenfor denne avstanden (meter)
+    radius_m: 800
+  - navn: Trollvika
+    nr: 11351
+    lat: 68.71725
+    lon: 17.022217
+    radius_m: 800
+  - navn: Ystevika
+    nr: 13306
+    lat: 68.694317
+    lon: 17.05325
+    radius_m: 800
+  - navn: Svartskjær
+    nr: 31817
+    lat: 68.718283
+    lon: 16.775467
+    radius_m: 800
+  - navn: Breivoll
+    nr: 33237
+    lat: 68.758417
+    lon: 17.152517
+    radius_m: 800     # slakteri iht. Fiskeridirektoratet
 
 # Hysterese-faktor for avgang: fartøyet må være radius_m * hysterese unna
 # før "avgang" varsles. Unngår falske varsler når båten ligger nær grensen.

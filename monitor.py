@@ -134,6 +134,10 @@ def maps_lenke(lat: float, lon: float) -> str:
     return f"https://www.google.com/maps?q={lat},{lon}"
 
 
+def marinetraffic_lenke(mmsi: int) -> str:
+    return f"https://www.marinetraffic.com/en/ais/details/ships/mmsi:{mmsi}"
+
+
 def sjekk(config: dict, state: dict) -> int:
     """Én sjekkerunde. Returnerer antall hendelser."""
     fartoy = {int(f["mmsi"]): f["navn"] for f in config["fartoy"]}
@@ -182,7 +186,8 @@ def sjekk(config: dict, state: dict) -> int:
                     f"**Avstand til lokalitet:** {avstand:.0f} m\n"
                     f"**Fart:** {fart if fart is not None else 'ukjent'} knop\n"
                     f"**Posisjon:** {lat:.5f}, {lon:.5f}\n"
-                    f"**Kart:** {maps_lenke(lat, lon)}\n\n"
+                    f"**Kart:** {maps_lenke(lat, lon)}\n"
+                    f"**MarineTraffic (live):** {marinetraffic_lenke(mmsi)}\n\n"
                     f"_Automatisk varsel fra AIS-overvåking (BarentsWatch)_"
                 )
                 hendelser.append((tittel, tekst))
