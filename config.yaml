@@ -36,6 +36,11 @@ lokaliteter:
     lon: 17.152517
     radius_m: 800     # slakteri iht. Fiskeridirektoratet
 
+# Fartsgrense (knop): fartøyet regnes bare som "på lokaliteten" hvis det
+# holder denne farten eller lavere innenfor radiusen. Fartøy som seiler forbi
+# i marsjfart utløser ingen varsler. Kan overstyres per lokalitet.
+maks_fart_knop: 4
+
 # Hysterese-faktor for avgang: fartøyet må være radius_m * hysterese unna
 # før "avgang" varsles. Unngår falske varsler når båten ligger nær grensen.
 hysterese: 1.5

@@ -84,9 +84,18 @@ def haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 
 
 def vurder_overgang(var_inne: bool, avstand_m: float, radius_m: float,
-                    hysterese: float) -> tuple[bool, str | None]:
-    """Returnerer (er_inne_nå, hendelse) der hendelse er 'ankomst', 'avgang' eller None."""
+                    hysterese: float, fart_knop: float | None = None,
+                    maks_fart_knop: float = 0.0) -> tuple[bool, str | None]:
+    """Returnerer (er_inne_nå, hendelse) der hendelse er 'ankomst', 'avgang' eller None.
+
+    Med maks_fart_knop > 0 regnes fartøyet først som "på lokaliteten" når det
+    er innenfor radius OG holder lav fart (<= maks_fart_knop). Fartøy som bare
+    seiler forbi i marsjfart utløser dermed ingen varsler. Manglende fartsdata
+    (None) tolkes som stilleliggende. Avgang krever kun at fartøyet forlater
+    området geografisk – farten på vei ut spiller ingen rolle."""
     if not var_inne and avstand_m <= radius_m:
+        if maks_fart_knop > 0 and fart_knop is not None and fart_knop > maks_fart_knop:
+            return False, None   # bare på gjennomfart
         return True, "ankomst"
     if var_inne and avstand_m > radius_m * hysterese:
         return False, "avgang"
@@ -143,6 +152,7 @@ def sjekk(config: dict, state: dict) -> int:
     fartoy = {int(f["mmsi"]): f["navn"] for f in config["fartoy"]}
     lokaliteter = config["lokaliteter"]
     hysterese = float(config.get("hysterese", 1.5))
+    maks_fart = float(config.get("maks_fart_knop", 0) or 0)
     stille_timer = float(config.get("stille_varsel_timer", 0) or 0)
 
     token = hent_token(os.environ["BW_CLIENT_ID"], os.environ["BW_CLIENT_SECRET"])
@@ -171,8 +181,10 @@ def sjekk(config: dict, state: dict) -> int:
             nokkel = f"lok_{lok['nr']}"
             var_inne = vstate.get(nokkel, {}).get("inne", False)
             avstand = haversine_m(lat, lon, lok["lat"], lok["lon"])
+            lok_maks_fart = float(lok.get("maks_fart_knop", maks_fart) or 0)
             inne, hendelse = vurder_overgang(var_inne, avstand,
-                                             float(lok["radius_m"]), hysterese)
+                                             float(lok["radius_m"]), hysterese,
+                                             fart, lok_maks_fart)
             vstate[nokkel] = {"inne": inne, "oppdatert": naa.isoformat()}
 
             if hendelse:
