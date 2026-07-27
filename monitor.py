@@ -109,24 +109,61 @@ def _gh_headers() -> dict:
     }
 
 
+DUBLETT_TIMER = 6.0  # hopp kun over varsel hvis identisk issue er nyere enn dette
+
+
+def _apne_varsel_issues(repo: str) -> list[dict]:
+    r = requests.get(
+        f"https://api.github.com/repos/{repo}/issues",
+        headers=_gh_headers(),
+        params={"state": "open", "labels": "ais-varsel", "per_page": 50},
+        timeout=30,
+    )
+    r.raise_for_status()
+    return r.json()
+
+
+def lukk_issues_med_tittel(tittel: str) -> None:
+    """Lukker åpne varsel-issues med gitt tittel (rydding, f.eks. lukk
+    ankomst-issuet når avgangen varsles)."""
+    token = os.environ.get("GITHUB_TOKEN")
+    repo = os.environ.get("GITHUB_REPOSITORY")
+    if not token or not repo:
+        return
+    try:
+        for i in _apne_varsel_issues(repo):
+            if i["title"] == tittel:
+                requests.patch(
+                    f"https://api.github.com/repos/{repo}/issues/{i['number']}",
+                    headers=_gh_headers(),
+                    json={"state": "closed", "state_reason": "completed"},
+                    timeout=30,
+                )
+                print(f"Lukket issue #{i['number']}: {tittel}")
+    except requests.RequestException as e:
+        print(f"ADVARSEL: fikk ikke lukket issue ({e})")
+
+
 def send_varsel(tittel: str, tekst: str) -> None:
-    """Oppretter GitHub-issue (-> e-post). Hopper over hvis en åpen issue
-    allerede har identisk tittel (beskytter mot dubletter etter omstart)."""
+    """Oppretter GitHub-issue (-> e-post). Hopper KUN over hvis en identisk
+    issue ble opprettet nylig (< DUBLETT_TIMER siden) og fortsatt er åpen –
+    det beskytter mot dubletter ved omstart uten å blokkere nye, reelle
+    hendelser fordi et gammelt varsel står åpent."""
     token = os.environ.get("GITHUB_TOKEN")
     repo = os.environ.get("GITHUB_REPOSITORY")
     if not token or not repo:
         print(f"[VARSEL] {tittel}\n{tekst}\n")
         return
     try:
-        r = requests.get(
-            f"https://api.github.com/repos/{repo}/issues",
-            headers=_gh_headers(),
-            params={"state": "open", "labels": "ais-varsel", "per_page": 20},
-            timeout=30,
-        )
-        if r.ok and any(i["title"] == tittel for i in r.json()):
-            print(f"Hopper over dublett: {tittel}")
-            return
+        naa = datetime.now(timezone.utc)
+        for i in _apne_varsel_issues(repo):
+            if i["title"] != tittel:
+                continue
+            opprettet = datetime.fromisoformat(i["created_at"].replace("Z", "+00:00"))
+            alder_timer = (naa - opprettet).total_seconds() / 3600
+            if alder_timer < DUBLETT_TIMER:
+                print(f"Hopper over dublett ({alder_timer:.1f} t gammel): {tittel}")
+                return
     except requests.RequestException:
         pass
     r = requests.post(
@@ -190,6 +227,8 @@ def sjekk(config: dict, state: dict) -> int:
             if hendelse:
                 verb = "ANKOMMET" if hendelse == "ankomst" else "DRATT FRA"
                 tittel = f"⚓ {navn} har {verb} {lok['navn']} ({lok['nr']})"
+                lukk_etterpaa = (f"⚓ {navn} har ANKOMMET {lok['navn']} "
+                                 f"({lok['nr']})") if hendelse == "avgang" else None
                 tekst = (
                     f"**Fartøy:** {navn} (MMSI {mmsi})\n"
                     f"**Hendelse:** {hendelse.upper()} – {lok['navn']} "
@@ -202,7 +241,7 @@ def sjekk(config: dict, state: dict) -> int:
                     f"**MarineTraffic (live):** {marinetraffic_lenke(mmsi)}\n\n"
                     f"_Automatisk varsel fra AIS-overvåking (BarentsWatch)_"
                 )
-                hendelser.append((tittel, tekst))
+                hendelser.append((tittel, tekst, lukk_etterpaa))
                 print(f"HENDELSE: {tittel}")
 
     for mmsi, navn in fartoy.items():
@@ -221,8 +260,12 @@ def sjekk(config: dict, state: dict) -> int:
                 ))
                 vstate["stille_varslet"] = True
 
-    for tittel, tekst in hendelser:
+    for hendelse_item in hendelser:
+        tittel, tekst = hendelse_item[0], hendelse_item[1]
+        lukk = hendelse_item[2] if len(hendelse_item) > 2 else None
         send_varsel(tittel, tekst)
+        if lukk:
+            lukk_issues_med_tittel(lukk)
 
     STATE_FILE.write_text(json.dumps(state, indent=2, ensure_ascii=False),
                           encoding="utf-8")
